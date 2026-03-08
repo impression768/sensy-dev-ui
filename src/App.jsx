@@ -35,6 +35,49 @@ const formatDateTime = (value) => {
   return date.toLocaleString();
 };
 
+const getInsightPayload = (record) => record?.insight ?? record?.result ?? record?.data ?? {};
+
+const extractInsightString = (record, field) => {
+  const payload = getInsightPayload(record);
+  const candidates = [payload?.[field], record?.[field]];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return "";
+};
+
+const extractInsightArray = (record, field) => {
+  const payload = getInsightPayload(record);
+  const candidate = payload?.[field] ?? record?.[field];
+  return Array.isArray(candidate) ? candidate : [];
+};
+
+const getInsightOptionLabel = (insight) => {
+  const inferredNeed = extractInsightString(insight, "inferredUserNeed");
+  const fallbackTitle = insight?.small?.title || "Insight";
+  return `${formatDateTime(insight?.generatedAt)} | ${inferredNeed || fallbackTitle}`;
+};
+
+const hideCitationLinksInText = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .replace(/(\(\s*)+\[[^\]]+\]\((?:https?:\/\/|www\.)[^)\s]+(?:\)[^)\s]*)*\)(\s*\))+/gi, "")
+    .replace(/\[[^\]]+\]\((?:https?:\/\/|www\.)[^)\s]+(?:\)[^)\s]*)*\)/gi, "")
+    .replace(/\(\s*(?:https?:\/\/|www\.)[^)\s]+(?:\)[^)\s]*)*\s*\)/gi, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+};
+
 const parseErrorMessage = async (response) => {
   try {
     const data = await response.json();
@@ -202,6 +245,38 @@ function App() {
 
   const latestInsightMeta = insightsHistory[0] || null;
   const selectedInsight = selectedInsightQuery.data || null;
+  const selectedInsightData = useMemo(() => {
+    const rawSources = extractInsightArray(selectedInsight, "sources");
+    const normalizedSources = rawSources.map((source) => {
+      if (typeof source === "object" && source !== null) {
+        return {
+          title: source.title || source.name || source.url || "Untitled source",
+          url: source.url || "",
+          kind: source.kind || "",
+          whyYouWillWantThis: source.whyYouWillWantThis || "",
+          summary: source.summary || source.snippet || ""
+        };
+      }
+
+      return {
+        title: String(source),
+        url: "",
+        kind: "",
+        whyYouWillWantThis: "",
+        summary: ""
+      };
+    });
+
+    return {
+      inferredUserNeed: extractInsightString(selectedInsight, "inferredUserNeed"),
+      internetAnswer: extractInsightString(selectedInsight, "internetAnswer"),
+      sources: normalizedSources,
+      supportItemIds: extractInsightArray(selectedInsight, "supportItemIds"),
+      hasLegacySources: normalizedSources.some(
+        (source) => !source.kind || !source.whyYouWillWantThis
+      )
+    };
+  }, [selectedInsight]);
 
   const selectedItem = useMemo(
     () => {
@@ -285,7 +360,7 @@ function App() {
                 {insightsHistory.length === 0 && <option value="">No previous snapshots</option>}
                 {insightsHistory.map((insight) => (
                   <option key={insight._id} value={insight._id}>
-                    {`${formatDateTime(insight.generatedAt)} | ${insight.small?.title || "Untitled"} (${insight.itemCount || 0} items)`}
+                    {getInsightOptionLabel(insight)}
                   </option>
                 ))}
               </select>
@@ -342,99 +417,83 @@ function App() {
 
               {selectedInsight && (
                 <>
-                  <h2 className="mt-2 text-xl font-semibold text-slate-900">
-                    {selectedInsight.small?.title || "Mind Cloud Insight"}
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-700">
-                    {selectedInsight.small?.summary || "No summary"}
-                  </p>
+                  {/* <section className="mt-3 rounded bg-white p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Inferred User Need</h3>
+                    <p className="mt-2 text-sm text-slate-700">
+                      {selectedInsightData.inferredUserNeed || "-"}
+                    </p>
+                  </section> */}
 
-                  <dl className="mt-3 grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
-                    <div className="rounded bg-white p-2">
-                      <dt className="font-semibold text-slate-500">Generated</dt>
-                      <dd className="mt-1">{formatDateTime(selectedInsight.generatedAt)}</dd>
-                    </div>
-                    <div className="rounded bg-white p-2">
-                      <dt className="font-semibold text-slate-500">Items Used</dt>
-                      <dd className="mt-1">{selectedInsight.itemCount || 0}</dd>
-                    </div>
-                  </dl>
-
-                  <section className="mt-4">
-                    <h3 className="text-sm font-semibold text-slate-900">Overall Sense</h3>
-                    <p className="mt-1 text-sm text-slate-700">
-                      {selectedInsight.insight?.overallSense || "-"}
+                  <section className="mt-3 rounded bg-white p-4">
+                    {/* <h3 className="text-sm font-semibold text-slate-900">Internet Answer</h3> */}
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                      {hideCitationLinksInText(selectedInsightData.internetAnswer) || "-"}
                     </p>
                   </section>
 
-                  <section className="mt-4">
-                    <h3 className="text-sm font-semibold text-slate-900">Insight Clusters</h3>
-                    {(selectedInsight.insight?.clusters || []).length === 0 && (
-                      <p className="mt-1 text-sm text-slate-600">No clusters provided.</p>
+                  <section className="mt-3 rounded bg-white p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Recommendations</h3>
+                    {selectedInsightData.sources.length === 0 && (
+                      <p className="mt-2 text-sm text-slate-600">No recommendations.</p>
                     )}
-                    {(selectedInsight.insight?.clusters || []).map((cluster, index) => (
-                      <div key={`${cluster.theme}-${index}`} className="mt-2 rounded bg-white p-3">
-                        <p className="text-sm font-medium text-slate-900">{cluster.theme}</p>
-                        <p className="mt-1 text-xs text-slate-600">{cluster.essence}</p>
-                        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-700">
-                          {(cluster.bullets || []).map((bullet, bulletIndex) => (
-                            <li key={`${bulletIndex}-${bullet}`}>{bullet}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </section>
-
-                  <section className="mt-4">
-                    <h3 className="text-sm font-semibold text-slate-900">Hidden Connections</h3>
-                    {(selectedInsight.insight?.hiddenConnections || []).length === 0 && (
-                      <p className="mt-1 text-sm text-slate-600">No hidden connections provided.</p>
+                    {selectedInsightData.hasLegacySources && (
+                      <p className="mt-2 text-xs text-amber-700">
+                        This snapshot may be old and missing recommendation metadata (`kind`,
+                        `whyYouWillWantThis`).
+                      </p>
                     )}
-                    {(selectedInsight.insight?.hiddenConnections || []).map((connection, index) => (
-                      <div key={`${connection.connection}-${index}`} className="mt-2 rounded bg-white p-3">
-                        <p className="text-sm font-medium text-slate-900">{connection.connection}</p>
-                        <p className="mt-1 text-xs text-slate-600">{connection.whyNonObvious}</p>
-                        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-700">
-                          {(connection.evidence || []).map((signal, signalIndex) => (
-                            <li key={`${signalIndex}-${signal}`}>{signal}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </section>
-
-                  <section className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded bg-white p-3">
-                      <h3 className="text-sm font-semibold text-slate-900">Recommended Now</h3>
-                      <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-700">
-                        {(selectedInsight.insight?.recommendedActions?.immediate || []).map(
-                          (entry, index) => (
-                            <li key={`${index}-${entry}`}>{entry}</li>
-                          )
-                        )}
+                    {selectedInsightData.sources.length > 0 && (
+                      <ul className="mt-2 space-y-3 text-sm text-slate-700">
+                        {selectedInsightData.sources.map((source, index) => {
+                          const visibleWhy = hideCitationLinksInText(source.whyYouWillWantThis);
+                          const visibleSummary = hideCitationLinksInText(source.summary);
+                          return (
+                            <li key={`${index}-${source.title}`} className="rounded border border-slate-200 p-3">
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
+                                  {source.kind || "recommendation"}
+                                </span>
+                              </div>
+                              {source.url ? (
+                                <a
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-medium text-sky-700 underline"
+                                >
+                                  {source.title}
+                                </a>
+                              ) : (
+                                <span className="font-medium">{source.title}</span>
+                              )}
+                              {visibleWhy && (
+                                <p className="mt-2 text-xs text-slate-600">
+                                   {visibleWhy}
+                                </p>
+                              )}
+                              {visibleSummary && (
+                                <p className="mt-1 text-xs text-slate-500">{visibleSummary}</p>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
-                    </div>
+                    )}
+                  </section>
 
-                    <div className="rounded bg-white p-3">
-                      <h3 className="text-sm font-semibold text-slate-900">Recommended Next</h3>
+                  {/* <section className="mt-3 rounded bg-white p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Support Item IDs</h3>
+                    {selectedInsightData.supportItemIds.length === 0 && (
+                      <p className="mt-2 text-sm text-slate-600">No related item ids.</p>
+                    )}
+                    {selectedInsightData.supportItemIds.length > 0 && (
                       <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-700">
-                        {(selectedInsight.insight?.recommendedActions?.nextWave || []).map(
-                          (entry, index) => (
-                            <li key={`${index}-${entry}`}>{entry}</li>
-                          )
-                        )}
+                        {selectedInsightData.supportItemIds.map((id, index) => (
+                          <li key={`${index}-${id}`}>{String(id)}</li>
+                        ))}
                       </ul>
-                    </div>
-                  </section>
-
-                  <section className="mt-4 rounded bg-white p-3">
-                    <h3 className="text-sm font-semibold text-slate-900">Open Questions</h3>
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-700">
-                      {(selectedInsight.insight?.openQuestions || []).map((question, index) => (
-                        <li key={`${index}-${question}`}>{question}</li>
-                      ))}
-                    </ul>
-                  </section>
+                    )}
+                  </section> */}
                 </>
               )}
             </div>
