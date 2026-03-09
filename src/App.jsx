@@ -678,10 +678,50 @@ function App() {
               </dl>
 
               <section className="mt-4">
-                <h4 className="mb-2 text-sm font-semibold text-slate-900">Detailed Data</h4>
-                <pre className="overflow-x-auto rounded bg-slate-950 p-3 text-xs text-slate-100">
-                  {JSON.stringify(selectedItem.detailed ?? {}, null, 2)}
-                </pre>
+                <h4 className="mb-2 text-sm font-semibold text-slate-900">Essentials</h4>
+                <div className="space-y-3 rounded border border-slate-200 bg-slate-50 p-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</p>
+                    <p className="mt-1 text-sm text-slate-800">
+                      {selectedItem?.small?.category || "-"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Keywords</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(selectedItem?.small?.keywords ?? []).length > 0 ? (
+                        selectedItem.small.keywords.map((keyword) => (
+                          <span
+                            key={keyword}
+                            className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200"
+                          >
+                            {keyword}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-500">No keywords</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Obvious Insights
+                    </p>
+                    {(selectedItem?.small?.essentialInsights ?? []).length > 0 ? (
+                      <ul className="mt-2 space-y-2 text-sm text-slate-800">
+                        {selectedItem.small.essentialInsights.map((insight) => (
+                          <li key={insight} className="rounded bg-white px-3 py-2 ring-1 ring-slate-200">
+                            {insight}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">No obvious insights</p>
+                    )}
+                  </div>
+                </div>
               </section>
 
               <details className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
