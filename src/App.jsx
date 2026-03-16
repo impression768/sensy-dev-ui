@@ -5,6 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000
 const ITEMS_QUERY_KEY = ["items"];
 const INSIGHTS_HISTORY_QUERY_KEY = ["mind-cloud-insights", "history"];
 const INSIGHT_DETAIL_QUERY_KEY = ["mind-cloud-insights", "detail"];
+const SHOW_INTERNET_ANSWER = false;
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -269,7 +270,9 @@ function App() {
 
     return {
       inferredUserNeed: extractInsightString(selectedInsight, "inferredUserNeed"),
-      internetAnswer: extractInsightString(selectedInsight, "internetAnswer"),
+      internetAnswer: SHOW_INTERNET_ANSWER
+        ? extractInsightString(selectedInsight, "internetAnswer")
+        : "",
       sources: normalizedSources,
       supportItemIds: extractInsightArray(selectedInsight, "supportItemIds"),
       hasLegacySources: normalizedSources.some(
@@ -424,12 +427,14 @@ function App() {
                     </p>
                   </section> */}
 
-                  <section className="mt-3 rounded bg-white p-4">
-                    {/* <h3 className="text-sm font-semibold text-slate-900">Internet Answer</h3> */}
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
-                      {hideCitationLinksInText(selectedInsightData.internetAnswer) || "-"}
-                    </p>
-                  </section>
+                  {SHOW_INTERNET_ANSWER && (
+                    <section className="mt-3 rounded bg-white p-4">
+                      {/* <h3 className="text-sm font-semibold text-slate-900">Internet Answer</h3> */}
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                        {hideCitationLinksInText(selectedInsightData.internetAnswer) || "-"}
+                      </p>
+                    </section>
+                  )}
 
                   <section className="mt-3 rounded bg-white p-4">
                     <h3 className="text-sm font-semibold text-slate-900">Recommendations</h3>
